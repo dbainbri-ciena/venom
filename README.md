@@ -100,9 +100,9 @@ func main() {
 	var err error
 
 	// Build a pflags struct based on the config structure and its tags.
-	// The environment variables will be prefixed with "VOLTHA" and the
+	// The environment variables will be prefixed with "TEST" and the
 	// default options are being used.
-	flags, err := venom.NewConfiguration(&Config{}, "VOLTHA",
+	flags, err := venom.NewConfiguration(&Config{}, "TEST",
 		venom.DefaultOptions, os.Args)
 	if err != nil {
 		panic(err)
