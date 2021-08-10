@@ -42,7 +42,7 @@ structure field that is not public, begins with a lower case letter, will be ski
 
 ### Processing Options
 The following structure is used to customize the processing of structure tags
-```
+```golang
 type ProcessingOptions struct {
     Flags         Flags
     LongSeparator string
@@ -58,7 +58,7 @@ names can be customized using the `EnvSeparator` and `LongSeparator`
 fields.
 
 A "sane" default for processing options is defined for use and is set to
-```
+```golang
 var DefaultOptions = ProcessingOptions{
     Flags:         WithEnv | WithFlag,
     LongSeparator: "-",
@@ -73,7 +73,7 @@ structures needed by those packages. As such the code that uses this
 module will also need to use viper/pflag calls to retrieve the command
 line options.
 
-```
+```golang
 package main
 
 import (
