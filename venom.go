@@ -37,15 +37,15 @@ import (
 // not a pointer to a struct
 var ErrSpecificationType = errors.New("configuration specification must be a pointer to a struct")
 
-// ProcessingOptions provides mechanism to customizer how tags are converted info configuraiton
-// settings
-type ProcessingOptions uint32
+// Flags provides mechanism to customize how tags are converted
+// info configuraiton settings
+type Flags uint32
 
-// Defines process options for the structure tag parser
+// Defines process flags for the structure tag parser
 const (
 
-	// NpProcessingOptions represents the zero value (i.e that no options are set)
-	NoProcessingOptions ProcessingOptions = 0x0
+	// None represents the zero value (i.e that no options are set)
+	None Flags = 0x0
 
 	// WithEnv specifies that the parser should automatically generate a environment variable for options
 	WithEnv = 0x1
@@ -54,8 +54,23 @@ const (
 	WithFlag = 0x2
 
 	// DefaultProcessingOptions  represents a useful set of default options for the parser
-	DefaultProcessingOptions = WithEnv | WithFlag
+	WithDefault = WithEnv | WithFlag
 )
+
+// ProcessingOption provides a mechanism to customize how the long and env
+// names are generated as well as specify processing flags to the parser
+type ProcessingOptions struct {
+	Flags         Flags
+	LongSeparator string
+	EnvSeparator  string
+}
+
+// DefaultOption some sane default options
+var DefaultOptions = ProcessingOptions{
+	Flags:         WithDefault,
+	LongSeparator: "-",
+	EnvSeparator:  "_",
+}
 
 var gatherRegexp = regexp.MustCompile("([^A-Z0-9]+|[A-Z0-9]+[^A-Z0-9]+|[A-Z0-9]+)")
 var acronymRegexp = regexp.MustCompile("([A-Z0-9]+)([A-Z0-9][^A-Z0-9]+)")
@@ -107,29 +122,28 @@ func AddConfiguration(flagSet *pflag.FlagSet, configSpecification interface{}, p
 	for i := 0; i < specType.NumField(); i++ {
 		field := specElem.Field(i)
 		fieldType := specType.Field(i)
-		fmt.Printf("Processing field '%s'\n", fieldType.Name)
 
 		// If the field should not be processed, either implicitly or explicitly, then skip
 		if !field.CanSet() || isTrue(fieldType.Tag.Get("ignored")) {
 			continue
 		}
 
-		splitName := splitIntoWords(fieldType.Name, "_")
+		splitEnvName := splitIntoWords(fieldType.Name, options.EnvSeparator)
+		splitLongName := splitIntoWords(fieldType.Name, options.LongSeparator)
 
 		// If an option for an environment variable configuration was set then process
 		envVar := fieldType.Tag.Get("env")
 		if envVar == "" {
 			envVar = fieldType.Tag.Get("e")
 		}
-		if envVar != "" || options&WithEnv != 0 {
+		if envVar != "" || options.Flags&WithEnv != 0 {
 			if envVar == "" {
-				envVar = strings.ToUpper(splitName)
+				envVar = strings.ToUpper(splitEnvName)
 			}
 		}
 		if envVar != "" && !strings.HasPrefix(envVar, prefix) {
-			envVar = strings.ToUpper(fmt.Sprintf("%s_%s", prefix, envVar))
+			envVar = strings.ToUpper(fmt.Sprintf("%s%s%s", prefix, options.EnvSeparator, envVar))
 		}
-		fmt.Printf("    ENV: '%s'\n", envVar)
 
 		// Check for default value specification and if not specified then
 		// use the types zero value
@@ -139,23 +153,20 @@ func AddConfiguration(flagSet *pflag.FlagSet, configSpecification interface{}, p
 		}
 		var defaultValue interface{}
 		var err error
-		fmt.Printf("    DEFAULT (as string): '%v'\n", defaultAsString)
 
 		if defaultAsString == "" {
 			defaultValue = reflect.Zero(field.Type()).Interface()
 		}
-		fmt.Printf("    DEFAULT (as iface): '%v'\n", defaultValue)
 
 		longFlag := fieldType.Tag.Get("long")
 		if longFlag == "" {
 			longFlag = fieldType.Tag.Get("l")
 		}
-		if longFlag != "" || options&WithFlag != 0 {
+		if longFlag != "" || options.Flags&WithFlag != 0 {
 			if longFlag == "" {
-				longFlag = strings.ToLower(splitName)
+				longFlag = strings.ToLower(splitLongName)
 			}
 		}
-		fmt.Printf("    LONG: '%s'\n", longFlag)
 
 		shortFlag := fieldType.Tag.Get("short")
 		if shortFlag == "" {
@@ -316,7 +327,6 @@ func AddConfiguration(flagSet *pflag.FlagSet, configSpecification interface{}, p
 				viper.SetDefault(fieldType.Name, defaultValue.(float64))
 				flagSet.Float64P(longFlag, shortFlag, defaultValue.(float64), help)
 			}
-			fmt.Printf("    SETDEF: '%#+v'\n", defaultValue)
 			_ = viper.BindPFlag(fieldType.Name, flagSet.Lookup(longFlag))
 		}
 	}
@@ -327,7 +337,7 @@ func AddConfiguration(flagSet *pflag.FlagSet, configSpecification interface{}, p
 // NewConfiguration constructs and returns a new PflagSet based on the structure tags
 // associated with the specified configSpecification interface.
 func NewConfiguration(configSpecification interface{}, prefix string, options ProcessingOptions, args []string) (*pflag.FlagSet, error) {
-	flagSet := pflag.NewFlagSet(path.Base(args[0]), pflag.ExitOnError)
+	flagSet := pflag.NewFlagSet(path.Base(args[0]), pflag.ContinueOnError)
 	if err := AddConfiguration(flagSet, configSpecification, prefix, options, args); err != nil {
 		return nil, err
 	}
